@@ -15,11 +15,12 @@ define(function (require) {
       }
 
       cachedPromise = es.search({
-        index: configFile.kibanaIndex,
+        index: configFile.kibana_index,
         type: 'index-pattern',
         fields: [],
         body: {
-          query: { match_all: {} }
+          query: { match_all: {} },
+          size: 10000
         }
       })
       .then(function (resp) {

@@ -12,10 +12,6 @@ define(function (require) {
   require('angular-route');
   require('angular-bindonce');
 
-  // Seems bad?
-  window.ZeroClipboard = require('zeroclipboard');
-  require('ng-clip');
-
   var configFile = JSON.parse(require('text!config'));
 
   var kibana = modules.get('kibana', [
@@ -49,17 +45,17 @@ define(function (require) {
   // setup routes
   routes
     .otherwise({
-      redirectTo: '/' + configFile.defaultAppId
+      redirectTo: '/' + configFile.default_app_id
     });
 
   // tell the modules util to add it's modules as requirements for kibana
   modules.link(kibana);
 
   kibana.load = _.onceWithCb(function (cb) {
-    require([
-      'controllers/kibana'
-    ], function loadApps() {
-      require(configFile.plugins, cb);
+    var firstLoad = [ 'plugins/kibana/index' ];
+    var thenLoad = _.difference(configFile.plugins, firstLoad);
+    require(firstLoad, function loadApps() {
+      require(thenLoad, cb);
     });
   });
 

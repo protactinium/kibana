@@ -41,10 +41,10 @@ define(function (require) {
       var isPercentage = (handler._attr.mode === 'percentage');
 
       if (isSeries) {
-
         // Find object with the actual d value and add it to the point object
         var object = _.find(series, { 'label': d.label });
         d.value = +object.values[i].y;
+        d.orig = object.values[i];
 
         if (isPercentage) {
 
@@ -190,11 +190,23 @@ define(function (require) {
       var brush = d3.svg.brush()
         .x(xScale)
         .on('brushend', function brushEnd() {
+
+          // Assumes data is selected at the chart level
+          // In this case, the number of data objects should always be 1
+          var data = d3.select(this).data()[0];
+          var isTimeSeries = (data.ordered && data.ordered.date);
+
+          // Allows for brushing on d3.scale.ordinal()
+          var selected = xScale.domain().filter(function (d) {
+            return (brush.extent()[0] <= xScale(d)) && (xScale(d) <= brush.extent()[1]);
+          });
+          var range = isTimeSeries ? brush.extent() : selected;
+
           return dispatch.brush({
-            range: brush.extent(),
+            range: range,
             config: attr,
             e: d3.event,
-            data: d3.event.sourceEvent.target.__data__
+            data: data
           });
         });
 

@@ -43,21 +43,27 @@ define(function (require) {
             });
           } else {
             buckets.forEach(function (subBucket, key) {
-              write.cell(key, function () {
+              write.cell(agg, key, function () {
                 collectBucket(write, subBucket, key);
               });
             });
           }
+        } else if (write.partialRows && write.metricsForAllBuckets && write.minimalColumns) {
+          // we don't have any buckets, but we do have metrics at this
+          // level, then pass all the empty buckets and jump back in for
+          // the metrics.
+          write.aggStack.unshift(agg);
+          passEmptyBuckets(write, bucket, key);
+          write.aggStack.shift();
         } else {
-          // bucket didn't result in sub-buckets, we will try to
-          // write the row, but stop digging. This row.write will do nothing in
-          // specific scenarios known to the the Response
+          // we don't have any buckets, and we don't have isHierarchical
+          // data, so no metrics, just try to write the row
           write.row();
         }
         break;
       case 'metrics':
         var value = (agg.type.name === 'count') ? bucketCount(bucket) : metricValue(aggResp);
-        write.cell(value, function () {
+        write.cell(agg, value, function () {
           if (!write.aggStack.length) {
             // row complete
             write.row();
@@ -80,6 +86,27 @@ define(function (require) {
     // read the bucket count from an agg bucket
     function bucketCount(bucket) {
       return bucket.doc_count;
+    }
+
+    // write empty values for each bucket agg, then write
+    // the metrics from the initial bucket using collectBucket()
+    function passEmptyBuckets(write, bucket, key) {
+      var agg = write.aggStack.shift();
+
+      switch (agg.schema.group) {
+      case 'metrics':
+        // pass control back to collectBucket()
+        write.aggStack.unshift(agg);
+        collectBucket(write, bucket, key);
+        return;
+
+      case 'buckets':
+        write.cell('', function () {
+          passEmptyBuckets(write, bucket, key);
+        });
+      }
+
+      write.aggStack.unshift(agg);
     }
 
     return notify.timed('tabify agg response', tabifyAggResponse);

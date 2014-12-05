@@ -1,5 +1,5 @@
 define(function (require) {
-  return function routeSetup(Promise, kbnSetup, config, $route, kbnUrl, courier, Notifier, Private) {
+  return function routeSetup(Promise, kbnSetup, config, $route, kbnUrl, courier, Notifier, Private, $rootScope) {
     var errors = require('errors');
     var NoDefaultIndexPattern = errors.NoDefaultIndexPattern;
     var NoDefinedIndexPatterns = errors.NoDefinedIndexPatterns;
@@ -12,10 +12,16 @@ define(function (require) {
         return Promise.all([
           kbnSetup(),
           config.init(),
-          courier.SearchSource.ready
+          courier.SearchSource.ready,
+          $rootScope.kibana.ready
         ])
         .then(function () {
-          if (!$route.current.$$route.originalPath.match(/settings\/indices/)) {
+          var path = $route.current.$$route.originalPath;
+          var allowedRoutes = [
+            '/settings/indices/',
+            '/settings/about'
+          ];
+          if (allowedRoutes.indexOf(path) < 0) {
             return courier.indexPatterns.getIds()
             .then(function (patterns) {
               if (!config.get('defaultIndex')) {

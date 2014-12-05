@@ -6,7 +6,7 @@ define(function (require) {
     function AggConfig(vis, opts) {
       var self = this;
 
-      self.id = _.uniqueId('agg_');
+      self.id = opts.id || AggConfig.nextId(vis.aggs);
       self.vis = vis;
       self._opts = opts = (opts || {});
 
@@ -25,6 +25,39 @@ define(function (require) {
       // resolve the params
       self.fillDefaults(opts.params);
     }
+
+    /**
+     * Ensure that all of the objects in the list have ids, the objects
+     * and list are modified by reference.
+     *
+     * @param  {array[object]} list - a list of objects, objects can be anything really
+     * @return {array} - the list that was passed in
+     */
+    AggConfig.ensureIds = function (list) {
+      var have = [];
+      var haveNot = [];
+      list.forEach(function (obj) {
+        (obj.id ? have : haveNot).push(obj);
+      });
+
+      var nextId = AggConfig.nextId(have);
+      haveNot.forEach(function (obj) {
+        obj.id = nextId++;
+      });
+
+      return list;
+    };
+
+    /**
+     * Calculate the next id based on the ids in this list
+     *
+     * @return {array} list - a list of objects with id properties
+     */
+    AggConfig.nextId = function (list) {
+      return 1 + list.reduce(function (max, obj) {
+        return Math.max(max, obj.id || 0);
+      }, 0);
+    };
 
     /**
      * Write the current values to this.params, filling in the defaults as we go
@@ -118,6 +151,7 @@ define(function (require) {
       }, {});
 
       return {
+        id: self.id,
         type: self.type && self.type.name,
         schema: self.schema && self.schema.name,
         params: outParams
@@ -134,6 +168,25 @@ define(function (require) {
     AggConfig.prototype.makeLabel = function () {
       if (!this.type) return '';
       return this.type.makeLabel(this);
+    };
+
+    AggConfig.prototype.field = function () {
+      return this.params.field;
+    };
+
+    AggConfig.prototype.fieldFormatter = function () {
+      var field = this.field();
+      return field ? field.format.convert : String;
+    };
+
+    AggConfig.prototype.fieldName = function () {
+      var field = this.field();
+      return field ? field.name : '';
+    };
+
+    AggConfig.prototype.fieldDisplayName = function () {
+      var field = this.field();
+      return field ? (field.displayName || this.fieldName()) : '';
     };
 
     return AggConfig;

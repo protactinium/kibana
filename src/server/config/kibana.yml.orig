@@ -1,0 +1,34 @@
+# Kibana is served by a back end server. This controls which port to use.
+port: 8080
+
+# The host to bind the server to.
+host: "0.0.0.0"
+
+<<<<<<< HEAD
+# The Elasticsearch instance to use for all your queries
+elasticsearch: "http://10.55.34.237:9200"
+=======
+# The Elasticsearch instance to use for all your queries.
+elasticsearch: "http://localhost:9200"
+>>>>>>> 3024692e21343467215c82731b8af2e62787a772
+
+# Kibana uses an index in Elasticsearch to store saved searches, visualizations
+# and dashboards. It will create a new index if it doesn't already exist.
+kibana_index: ".kibana"
+
+# The default application to load.
+default_app_id: "discover"
+
+# Time in seconds to wait for responses from the back end or elasticsearch.
+# Note this should always be higher than "shard_timeout".
+# This must be > 0
+request_timeout: 60
+
+# Time in milliseconds for Elasticsearch to wait for responses from shards.
+# Note this should always be lower than "request_timeout".
+# Set to 0 to disable (not recommended).
+shard_timeout: 30000
+
+# Set to false to have a complete disregard for the validity of the SSL
+# certificate.
+verify_ssl: true

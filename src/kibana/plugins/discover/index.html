@@ -112,7 +112,7 @@
       <!-- result -->
       <div class="col-md-10 results" ng-show="resultState === 'ready'">
         <h3 ng-show="opts.savedSearch.id">
-          {{ opts.savedSearch.title }}
+          <span bindonce bo-bind="opts.savedSearch.title"></span>
           <i tooltip="Reload saved query" ng-click="resetQuery();" class="fa fa-undo smallest small"></i>
         </h3>
         <div class="discover-timechart" ng-if="opts.timefield">
@@ -146,7 +146,7 @@
             filtering="filterQuery"
             refresh="fetch"
             timefield="opts.timefield"
-            mapping="fieldsByName">
+            index-pattern="indexPattern">
           </kbn-table>
 
           <div ng-if="rows.length == opts.sampleSize" class="discover-table-footer">

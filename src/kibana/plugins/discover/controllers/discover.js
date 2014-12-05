@@ -13,12 +13,13 @@ define(function (require) {
   require('components/timepicker/timepicker');
   require('directives/fixed_scroll');
   require('directives/validate_json');
-  require('directives/validate_query');
+  require('components/validate_query/validate_query');
   require('filters/moment');
   require('components/courier/courier');
   require('components/index_patterns/index_patterns');
   require('components/state_management/app_state');
   require('services/timefilter');
+  require('components/highlight/highlight_tags');
 
   require('plugins/discover/directives/table');
 
@@ -46,9 +47,11 @@ define(function (require) {
     }
   });
 
-  app.controller('discover', function ($scope, config, courier, $route, $window, Notifier, AppState, timefilter, Promise, Private, kbnUrl) {
+  app.controller('discover', function ($scope, config, courier, $route, $window, Notifier,
+    AppState, timefilter, Promise, Private, kbnUrl, highlightTags) {
 
     var Vis = Private(require('components/vis/vis'));
+    var docTitle = Private(require('components/doc_title/doc_title'));
     var SegmentedFetch = Private(require('plugins/discover/_segmented_fetch'));
 
     var HitSortFn = Private(require('plugins/discover/_hit_sort_fn'));
@@ -78,8 +81,9 @@ define(function (require) {
     // Manage state & url state
     var initialQuery = $scope.searchSource.get('query');
 
-    var defaultFormat = courier.indexPatterns.fieldFormats.defaultByType.string;
-
+    if (savedSearch.id) {
+      docTitle.change(savedSearch.title);
+    }
 
     var stateDefaults = {
       query: initialQuery || '',
@@ -91,17 +95,6 @@ define(function (require) {
 
     var metaFields = config.get('metaFields');
 
-    $scope.intervalOptions = [
-      'auto',
-      'second',
-      'minute',
-      'hour',
-      'day',
-      'week',
-      'month',
-      'year'
-    ];
-
     var $state = $scope.state = new AppState(stateDefaults);
 
     if (!_.contains(indexPatternList, $state.index)) {
@@ -112,7 +105,7 @@ define(function (require) {
         $state.index = config.get('defaultIndex');
       } else {
         notify.warning(reason + 'Please set a default index to continue.');
-        kbnUrl.change('/settings/indices');
+        kbnUrl.redirect('/settings/indices');
 
         return;
       }
@@ -139,16 +132,20 @@ define(function (require) {
         var ignoreStateChanges = ['columns'];
 
         // listen for changes, and relisten everytime something happens
-        $scope.$listen($state, 'fetch_with_changes', function (changed) {
+        $scope.$listen($state, 'fetch_with_changes', updateFields);
+        $scope.$listen($state, 'reset_with_changes', updateFields);
+
+        function updateFields(changed) {
           if (_.contains(changed, 'columns')) {
             $scope.fields.forEach(function (field) {
               field.display = _.contains($state.columns, field.name);
             });
+            refreshColumns();
           }
 
           // if we only have ignorable changes, do nothing
           if (_.difference(changed, ignoreStateChanges).length) $scope.fetch();
-        });
+        }
 
         $scope.$listen(timefilter, 'update', function () {
           $scope.fetch();
@@ -272,7 +269,7 @@ define(function (require) {
 
         var sort = $state.sort;
         var timeField = $scope.searchSource.get('index').timeFieldName;
-        var totalSize = $scope.size || 500;
+        var totalSize = $scope.size || $scope.opts.sampleSize;
 
         /**
          * Basically an emum.
@@ -332,26 +329,23 @@ define(function (require) {
               // ---
               // when we are sorting results, we need to redo the counts each time because the
               // "top 500" may change with each response
-              if (hit._formatted && !sortFn) return;
+              if (hit.$$_formatted && !sortFn) return;
 
               // Flatten the fields
               var indexPattern = $scope.searchSource.get('index');
-              hit._source = indexPattern.flattenSearchResponse(hit._source);
+              hit.$$_flattened = indexPattern.flattenHit(hit);
 
-              hit._formatted = _.mapValues(hit._source, function (value, name) {
+              var formatAndCount = function (value, name) {
                 // add up the counts for each field name
-                if (counts[name]) counts[name] = counts[name] + 1;
-                else counts[name] = 1;
+                counts[name] = counts[name] ? counts[name] + 1 : 1;
 
-                return ($scope.formatsByName[name] || defaultFormat).convert(value);
-              });
+                var defaultFormat = courier.indexPatterns.fieldFormats.defaultByType.string;
+                var formatter = indexPattern.fields.byName[name] ? indexPattern.fields.byName[name].format : defaultFormat;
 
-              hit._formatted._source = angular.toJson(hit._source);
-            });
+                return formatter.convert(value);
+              };
 
-            // ensure that the meta fields always have a "row count" equal to the number of rows
-            metaFields.forEach(function (fieldName) {
-              counts[fieldName] = $scope.rows.length;
+              hit.$$_formatted = _.mapValues(hit.$$_flattened, formatAndCount);
             });
 
             // apply the field counts to the field list
@@ -441,10 +435,15 @@ define(function (require) {
         return sort;
       })
       .query(!$state.query ? null : $state.query)
+      .highlight({
+        pre_tags: [highlightTags.pre],
+        post_tags: [highlightTags.post],
+        fields: {'*': {}}
+      })
       .set('filter', $state.filters || []);
 
       // get the current indexPattern
-      var indexPattern = $scope.searchSource.get('index');
+      var indexPattern = $scope.indexPattern = $scope.searchSource.get('index');
 
       // if indexPattern exists, but $scope.opts.index doesn't, or the opposite, or if indexPattern's id
       // is not equal to the $scope.opts.index then either clean or
@@ -497,7 +496,6 @@ define(function (require) {
 
       $scope.fields = [];
       $scope.fieldsByName = {};
-      $scope.formatsByName = {};
 
       if (!indexPattern) return;
 
@@ -505,6 +503,7 @@ define(function (require) {
         _.defaults(field, currentState[field.name]);
         // clone the field and add it's display prop
         var clone = _.assign({}, field, {
+          displayName: field.displayName, // this is a getter, so we need to copy it over manually
           format: field.format, // this is a getter, so we need to copy it over manually
           display: columnObjects[field.name] || false,
           rowCount: $scope.rows ? $scope.rows.fieldCounts[field.name] : 0
@@ -512,15 +511,14 @@ define(function (require) {
 
         $scope.fields.push(clone);
         $scope.fieldsByName[field.name] = clone;
-        $scope.formatsByName[field.name] = field.format;
       });
 
       refreshColumns();
     }
 
     // TODO: On array fields, negating does not negate the combination, rather all terms
-    $scope.filterQuery = function (field, value, operation) {
-      value = _.isArray(value) ? value : [value];
+    $scope.filterQuery = function (field, values, operation) {
+      values = _.isArray(values) ? values : [values];
 
       var indexPattern = $scope.searchSource.get('index');
       indexPattern.popularizeField(field, 1);
@@ -528,28 +526,46 @@ define(function (require) {
       // Grap the filters from the searchSource and ensure it's an array
       var filters = _.flatten([$state.filters], true);
 
-      _.each(value, function (clause) {
-        var previous = _.find(filters, function (item) {
-          if (item && item.query) {
-            return item.query.match[field].query === clause;
-          } else if (item && item.exists && field === '_exists_') {
-            return item.exists.field === clause;
-          } else if (item && item.missing && field === '_missing_') {
-            return item.missing.field === clause;
+      _.each(values, function (value) {
+        var existing = _.find(filters, function (filter) {
+          if (!filter) return;
+
+          if (field === '_exists_' && filter.exists) {
+            return filter.exists.field === value;
+          }
+
+          if (field === '_missing_' && filter.missing) {
+            return filter.missing.field === value;
+          }
+
+          if (filter.query) {
+            return filter.query.match[field] && filter.query.match[field].query === value;
           }
         });
-        if (!previous) {
-          var filter;
-          if (field === '_exists_') {
-            filter = { exists: { field: clause } };
-          } else if (field === '_missing_') {
-            filter = { missing: { field: clause } };
-          } else {
-            filter = { query: { match: {} } };
-            filter.negate = operation === '-';
-            filter.query.match[field] = { query: clause, type: 'phrase' };
-          }
+
+        if (existing) return;
+
+        switch (field) {
+        case '_exists_':
+          filters.push({
+            exists: {
+              field: value
+            }
+          });
+          break;
+        case '_missing_':
+          filters.push({
+            missing: {
+              field: value
+            }
+          });
+          break;
+        default:
+          var filter = { query: { match: {} } };
+          filter.negate = operation === '-';
+          filter.query.match[field] = { query: value, type: 'phrase' };
           filters.push(filter);
+          break;
         }
       });
 
@@ -591,6 +607,7 @@ define(function (require) {
 
       // Make sure there are no columns added that aren't in the displayed field list.
       $state.columns = _.intersection($state.columns, fields);
+
 
       // If no columns remain, use _source
       if (!$state.columns.length) {

@@ -2,7 +2,7 @@
 /* markdown
 
 ### Formatting a value
-To format a response value, you need to get ahold of the field list, which is usually available at `indexPattern.fields`. When the indexPattern is not available, call `courier.getFieldsFor`. Each field object has a `format` property*, which is an object detailed in [_field_formats.js](https://github.com/elasticsearch/kibana4/blob/master/src/kibana/components/index_patterns/_field_formats.js).
+To format a response value, you need to get ahold of the field list, which is usually available at `indexPattern.fields`. Each field object has a `format` property*, which is an object detailed in [_field_formats.js](https://github.com/elasticsearch/kibana4/blob/master/src/kibana/components/index_patterns/_field_formats.js).
 
 Once you have the field that a response value came from, pass the value to `field.format.convert(value)` and a formatted string representation of the field will be returned.
 
@@ -48,15 +48,17 @@ define(function (require) {
         ],
         name: 'string',
         convert: function (val) {
-          if (_.isObject(val)) {
-            return JSON.stringify(val);
-          }
-          else if (val == null) {
-            return '';
-          }
-          else {
-            return '' + val;
-          }
+          return formatField(val, function (val) {
+            if (_.isObject(val)) {
+              return JSON.stringify(val);
+            }
+            else if (val == null) {
+              return '';
+            }
+            else {
+              return '' + val;
+            }
+          });
         }
       },
       {
@@ -65,7 +67,13 @@ define(function (require) {
         ],
         name: 'date',
         convert: function (val) {
-          return moment(val).format(config.get('dateFormat'));
+          return formatField(val, function (val) {
+            if (_.isNumber(val) || _.isDate(val)) {
+              return moment(val).format(config.get('dateFormat'));
+            } else {
+              return val;
+            }
+          });
         }
       },
       {
@@ -73,9 +81,11 @@ define(function (require) {
           'ip'
         ],
         name: 'ip',
-        convert: function (ip) {
-          if (!isFinite(ip)) return ip;
-          return [ip >>> 24, ip >>> 16 & 0xFF, ip >>> 8 & 0xFF, ip & 0xFF].join('.');
+        convert: function (val) {
+          return formatField(val, function (val) {
+            if (!isFinite(val)) return val;
+            return [val >>> 24, val >>> 16 & 0xFF, val >>> 8 & 0xFF, val & 0xFF].join('.');
+          });
         }
       },
       {
@@ -84,10 +94,24 @@ define(function (require) {
         ],
         name: 'kilobytes',
         convert: function (val) {
-          return (val / 1024).toFixed(3) + ' kb';
+          return formatField(val, function (val) {
+            return (val / 1024).toFixed(3) + ' kb';
+          });
         }
       }
     ];
+
+    function formatField(value, fn) {
+      if (_.isArray(value)) {
+        if (value.length === 1) {
+          return fn(value[0]);
+        } else {
+          return JSON.stringify(_.map(value, fn));
+        }
+      } else {
+        return fn(value);
+      }
+    }
 
     formats.byType = _.transform(formats, function (byType, formatter) {
       formatter.types.forEach(function (type) {
