@@ -68,8 +68,26 @@ define(function (require) {
       var layer;
       var circles;
 
+      var checkNull = function(d){
+        mydata= d;
+        for (var i = 0; i < mydata.length; i++) {
+          for (var j = 0; j < mydata[i].length; j++) {
+            if (mydata[i][j].y ==0){
+              // here the value is zero, we are going to delete it.
+              mydata[i].splice(j,1);
+              j--;
+            }
+          }
+        }
+        return mydata;
+        // if (d.y==0){
+        //   console.log(d);
+        // }
+        // return d.y>0;
+      };
+
       layer = svg.selectAll('.points')
-      .data(data)
+      .data(checkNull(data))
       .enter()
         .append('g')
         .attr('class', 'points line');
@@ -87,6 +105,7 @@ define(function (require) {
       circles
       .enter()
         .append('circle')
+        // .defined(function(d) { return checkNull(d); })
         .attr('class', function circleClass(d) {
           return self.colorToClass(color(d.label));
         })
@@ -108,6 +127,7 @@ define(function (require) {
       .attr('cy', function cy(d) {
         return yScale(d.y);
       })
+      .style("display", function(d) { return d.y == 0 ? "none" : null; })
       .attr('r', circleRadius);
 
       if (isTooltip) {
@@ -125,6 +145,9 @@ define(function (require) {
      * @param data {Array} Array of object data points
      * @returns {D3.UpdateSelection} SVG with paths added
      */
+
+
+
     LineChart.prototype.addLines = function (svg, data) {
       var self = this;
       var xScale = this.handler.xAxis.xScale;
@@ -133,7 +156,35 @@ define(function (require) {
       var color = this.handler.data.getColorFunc();
       var ordered = this.handler.data.get('ordered');
       var interpolate = this._attr.interpolate;
+
+
+      /**
+       * Renders d3 visualization
+       *
+       * @method draw
+       * @returns {Function} Creates the line chart
+       */
+
+      var checkNull = function(d){
+        mydata= d;
+        for (var i = 0; i < mydata.length; i++) {
+          for (var j = 0; j < mydata[i].values.length; j++) {
+            if (mydata[i].values[j].y ==0){
+              // here the value is zero, we are going to delete it.
+              mydata[i].values.splice(j,1);
+              j--;
+            }
+          }
+        }
+        return mydata;
+        // if (d.y==0){
+        //   console.log(d);
+        // }
+        // return d.y>0;
+      };
+
       var line = d3.svg.line()
+      // .defined(function(d) { return checkNull(d); })
       .interpolate(interpolate)
       .x(function x(d) {
         if (ordered && ordered.date) {
@@ -148,7 +199,8 @@ define(function (require) {
 
       lines = svg
       .selectAll('.lines')
-      .data(data)
+      // .data(data)
+      .data(checkNull(data))
       .enter()
         .append('g')
         .attr('class', 'lines');
@@ -168,6 +220,9 @@ define(function (require) {
 
       return lines;
     };
+
+
+
 
     /**
      * Adds SVG clipPath
@@ -197,12 +252,15 @@ define(function (require) {
       .attr('height', height + clipPathBuffer);
     };
 
+
     /**
      * Renders d3 visualization
      *
      * @method draw
      * @returns {Function} Creates the line chart
      */
+
+
     LineChart.prototype.draw = function () {
       var self = this;
       var $elem = $(this.chartEl);

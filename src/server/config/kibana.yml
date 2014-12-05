@@ -1,11 +1,11 @@
 # Kibana is served by a back end server. This controls which port to use.
-port: 5601
+port: 8080
 
 # The host to bind the server to
 host: "0.0.0.0"
 
 # The Elasticsearch instance to use for all your queries
-elasticsearch: "http://localhost:9200"
+elasticsearch: "http://10.55.34.237:9200"
 
 # Kibana uses an index in Elasticsearch to store saved searches, visualizations
 # and dashboards. It will create an new index if it doesn't already exist.
